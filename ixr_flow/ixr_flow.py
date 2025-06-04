@@ -63,7 +63,8 @@ class IXRFlow:
         dashboard_thread = IXRDashboard(board_shim, self.args.reference, self.args.display_ref,
                                       thread_name="graph_1", thread_daemon=False)
         dashboard_thread.set_parameters(self.args.calib_length, self.args.power_length,
-                                        self.args.scale, self.args.offset, self.args.head_impact)
+                                        self.args.scale, self.args.offset, self.args.head_impact,
+                                        self.args.longerterm_length)
         dashboard_thread.start()
 
         logging.info("Starting LSL event listener.")
@@ -114,6 +115,7 @@ class IXRFlow:
         parser.add_argument('--scale', type=float, default=1.5, help='Scale, defaults to 1.5')
         parser.add_argument('--offset', type=float, default=0.5, help='Offset, defaults to 0.5')
         parser.add_argument('--head-impact', type=float, default=0.2, help='Head impact, defaults to 0.2')
+        parser.add_argument('--longerterm-length', type=int, default=30, help='Longer-term average length, defaults to 30')
 
         # IXR-flow utility arguments
         parser.add_argument('--log-file', type=str, default='ixr_flow.log', required=False,

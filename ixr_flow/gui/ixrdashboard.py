@@ -102,6 +102,7 @@ class IXRDashboard(Thread):
         self.engagement_hist = [0, 1]
         self.engagement = 0
         self.power_metrics = 0
+        self.longerterm_hist = [0]  # Add list for longer-term history
 
         # LSL stream
         name = 'BrainPower'
@@ -110,6 +111,13 @@ class IXRDashboard(Thread):
                                    channel_format=cf_double64, source_id='ixrflow_transmit_power')
         self.outlet_transmit = StreamOutlet(info_transmit)
         logging.info(f"'{self.outlet_transmit.get_info().name()}' Power Metric stream started.")
+
+        name = 'BrainPowerIndividual'
+        logging.info(f"Starting '{name}' Power Metric stream.")
+        info_transmit_individual = StreamInfo(name=name, type='IXR-metric', channel_count=2, nominal_srate=20.0,
+                                   channel_format=cf_double64, source_id='ixrflow_transmit_power')
+        self.outlet_transmit_individual = StreamOutlet(info_transmit_individual)
+        logging.info(f"'{self.outlet_transmit_individual.get_info().name()}' Power Metric stream started.")
 
         name = 'SpectralPower'
         logging.info(f"Starting '{name}' stream.")
@@ -134,7 +142,7 @@ class IXRDashboard(Thread):
         QtGui.QApplication.instance().exec_()
 
     def set_parameters(self, calib_length: int = 600, power_length: int = 10, scale: float = 1.5,
-                       offset: float = 0.5, head_impact: float = 0.2) -> None:
+                       offset: float = 0.5, head_impact: float = 0.2, longerterm_length: int = 30) -> None:
         """Allows setting ixr-flow metrics. Is called with defaults on object initialization.
 
         :param calib_length: Calibration length, defaults to 600
@@ -147,9 +155,12 @@ class IXRDashboard(Thread):
         :type offset: float, optional
         :param head_impact: Head impact, defaults to 0.2
         :type head_impact: float, optional
+        :param longerterm_length: Longer-term average length, defaults to 30
+        :type longerterm_length: int, optional
         """
         self.calib_length = int(calib_length * 1000 / self.update_speed_ms)
         self.hist_length = int(power_length * 1000 / self.update_speed_ms)
+        self.longerterm_length = int(longerterm_length * 1000 / self.update_speed_ms)
         self.brain_scale = scale
         self.brain_center = offset
         self.head_impact = head_impact
@@ -256,19 +267,19 @@ class IXRDashboard(Thread):
 
     def _init_brain_power_plot(self) -> None:
         self.power_plot = self.win.addPlot(row=np.max([1,round(0.4*self.all_time_series)])+np.max([1,round(0.3*self.all_time_series)]), col=1, rowspan=np.max([1,round(0.3*self.all_time_series)]))
-        self.power_plot.setTitle('final focus metric')
+        self.power_plot.setTitle('brain power metrics')
 
         self.power_plot.showAxis('left', True)
         self.power_plot.setMenuEnabled('left', False)
         self.power_plot.showAxis('bottom', True)
         self.power_plot.setMenuEnabled('bottom', False)
-        y = [0]
-        x = [1]
+        y = [0, 0, 0]
+        x = [1, 2, 3]
         self.power_bar = pg.BarGraphItem(x=x, height=y, width=0.8, pen=self.pens[5], brush=self.brushes[5])
         self.power_plot.addItem(self.power_bar)
-        self.power_plot.setXRange(0.1, 1.9, padding=0)
+        self.power_plot.setXRange(0.1, 3.9, padding=0)
         self.power_plot.setYRange(-0.1, 1.1, padding=0)
-        ticklabels = ['', '']
+        ticklabels = ['', 'short-term', 'long-term', 'final']
         tickdict = dict(enumerate(ticklabels))
         ay = self.power_plot.getAxis('bottom')
         ay.setTicks([tickdict.items()])
@@ -516,7 +527,6 @@ class IXRDashboard(Thread):
         inverse_workload_weighted_mean = 0
         sumweight = 0
         
-        #print(self.inverse_workload_hist)
         for count, hist_val in enumerate(self.inverse_workload_hist):
             inverse_workload_weighted_mean += hist_val * count
             sumweight += count
@@ -525,16 +535,29 @@ class IXRDashboard(Thread):
 
         self.engagement = engagement_weighted_mean
         self.inverse_workload = inverse_workload_weighted_mean
-        #self.power_metrics = [np.float32(self.engagement + (1 - head_movement) * self.head_impact), np.float32(self.inverse_workload + (1 - head_movement) * self.head_impact)]
-        self.power_metrics = [np.float32(self.engagement + (1 - head_movement) * self.head_impact)]
-        #print(self.power_metrics)
+        
+        # Calculate short-term brainpower
+        short_term_brainpower = np.float32(self.engagement + (1 - head_movement) * self.head_impact)
+        
+        # Update longer-term history
+        self.longerterm_hist.append(short_term_brainpower)
+        if len(self.longerterm_hist) > self.longerterm_length:
+            del self.longerterm_hist[0]
+            
+        # Calculate longer-term average
+        longer_term_brainpower = np.mean(self.longerterm_hist)
+        
+        # Use max of short-term and longer-term brainpower
+        final_brainpower = np.float32(max(short_term_brainpower, longer_term_brainpower))
+        self.power_metrics = [final_brainpower]
 
         # plot bars
         self.band_bar.setOpts(height=avg_bands)
-        self.power_bar.setOpts(height=self.power_metrics)
+        self.power_bar.setOpts(height=[short_term_brainpower, longer_term_brainpower, final_brainpower])
 
-        #print(self.power_metrics[0])
+        # Send both short-term and longer-term brainpower values
         self.outlet_transmit.push_sample([self.power_metrics[0]])
+        self.outlet_transmit_individual.push_sample([short_term_brainpower, longer_term_brainpower])
         self.outlet_transmit_spectrum.push_sample(avg_bands)
 
         self.app.processEvents()

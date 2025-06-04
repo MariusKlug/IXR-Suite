@@ -44,6 +44,7 @@ class IXRSuite():
         self.create_scale_ent_input(root)
         self.create_center_ent_input(root)
         self.create_headstr_ent_input(root)
+        self.create_longerterm_input(root)
 
         # create connect button
         connectBtn = tk.Button(root, command=self.connectBtn_command)
@@ -259,6 +260,28 @@ class IXRSuite():
         self.CreateToolTip(calibrationHistoryLabel,
                            text='Duration of the rolling calibration in seconds (default = 600)')
 
+    def create_longerterm_input(self, root):
+        self.longertermEnt = tk.Entry(root)
+        self.longertermEnt["bg"] = "#e9f5db"
+        self.longertermEnt["borderwidth"] = "1px"
+        ft = tkfont.Font(family='Helvetica', size=13)
+        self.longertermEnt["font"] = ft
+        self.longertermEnt["fg"] = "#264653"
+        self.longertermEnt["justify"] = "center"
+        self.longertermEnt.insert(tk.END, '30')
+        self.longertermEnt.place(x=250, y=440, width=70, height=25)
+
+        longertermLabel = tk.Label(root)
+        longertermLabel["bg"] = "#264653"
+        ft = tkfont.Font(family='Helvetica', size=12)
+        longertermLabel["font"] = ft
+        longertermLabel["fg"] = "#e9f5db"
+        longertermLabel["justify"] = "center"
+        longertermLabel["text"] = "longerterm average length"
+        longertermLabel.place(x=40, y=440, width=200, height=25)
+        self.CreateToolTip(longertermLabel,
+                           text='Duration of the longer-term average in seconds (default = 30)')
+
     def connectBtn_command(self) -> None:
         arguments = [
             '--board-id', str(self.boardidEnt.get()),
@@ -269,6 +292,7 @@ class IXRSuite():
             '--scale', str(self.scaleEnt.get()),
             '--offset', str(self.centerEnt.get()),
             '--head-impact', str(self.headStrengthEnt.get()),
+            '--longerterm-length', str(self.longertermEnt.get()),
         ]
         if self.display_ref_ent.get() == '1':
             arguments.append('--display-ref')
